@@ -1,22 +1,34 @@
 {
-  "data": [
+  "data" : [
     {
-      "id":1,
-      "username":"fatur",
-      "password":"$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
-      "fullname":"fatur",
-      "norek":"123456789",
-      "created_at":"2022-01-01",
-      "updated_at":"2022-01-01"
-    },
-    {
-      "id":2,
-      "username":"ijat",
-      "password":"$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
-      "fullname":"fatur",
-      "norek":"123456789",
-      "created_at":"2022-01-01",
-      "updated_at":"2022-01-01"
-    }
+      "id": 1,
+      "username": "fatur",
+      "password": "$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
+      "fullname": "fatur",
+      "norek": "123456789",
+      "balance": 1000000,
+      "created_at": "2022-01-01",
+      "updated_at": "2022-01-12 15:46:07.8043281 +0700 +07 m=+4.270678001"
+     },
+     {
+      "id": 2,
+      "username": "ijat",
+      "password": "$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
+      "fullname": "ijat",
+      "norek": "987654321",
+      "balance": 1000000,
+      "created_at": "2022-01-01",
+      "updated_at": "2022-01-12 15:46:07.8050535 +0700 +07 m=+4.271403401"
+     },
+     {
+      "id": 3,
+      "username": "jarjit",
+      "password": "$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
+      "fullname": "jarjit",
+      "norek": "234567891",
+      "balance": 1000000,
+      "created_at": "2022-01-01",
+      "updated_at": "2022-01-12 15:46:07.8056066 +0700 +07 m=+4.271956501"
+     }
   ]
 }
