@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
-
+	"fmt"
+	
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
@@ -54,6 +55,51 @@ type PaymentTf struct {
 	Updated_at string `json:"updated_at"`
 }
 
+type Log struct {
+	Error bool	`json:"error"`
+	Message string	`json:"message"`
+	Data string `json:"data"`
+}
+
+type LogHistory struct {
+	Id int `json:"id"`
+	Log string `json:"log"`
+	Created_at string `json:"created_at"`
+	Updated_at string `json:"updated_at"`
+}
+
+func CreateLogHistory (error bool, message, data string) {
+	fileName := "json/log.json"
+	file, err := ioutil.ReadFile(fileName)
+		if err != nil {
+			return
+		}
+	object := Log{error, message, data}
+	jsonString, _ := json.Marshal(object)
+
+	LogData := []LogHistory{}
+	json.Unmarshal(file, &LogData)
+	newStruct := &LogHistory{
+		Id:         len(LogData) + 1,
+		Log: string(jsonString),
+		Created_at: time.Now().String(),
+		Updated_at: time.Now().String(),
+	}
+	LogData = append(LogData, *newStruct)
+
+	// Preparing the data to be marshalled and written.
+	dataBytes, err := json.MarshalIndent(LogData, "", " ")
+	if err != nil {
+		return
+	}
+
+	err = ioutil.WriteFile(fileName, dataBytes, 0644)
+	if err != nil {
+		return
+	}
+
+}
+
 func main() {
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
@@ -74,7 +120,7 @@ func main() {
 
 		// Declare the expiration time of the token
 		// here, we have kept it as 5 minutes
-		expirationTime := time.Now().Add(5 * time.Minute)
+		expirationTime := time.Now().Add(60 * time.Minute)
 
 		userJson, _ := ioutil.ReadFile("json/user.json")
 		var userData User
@@ -85,6 +131,7 @@ func main() {
 			hashedPassword := []byte(val.Password)
 			matchPass := bcrypt.CompareHashAndPassword(hashedPassword, password)
 			if jsonLogin.Username != val.Username || matchPass != nil {
+				CreateLogHistory(true, "unauthorized", "{}")
 				c.JSON(http.StatusUnauthorized, gin.H{"status": "unauthorized"})
 				return
 			}
@@ -110,6 +157,8 @@ func main() {
 
 			c.SetCookie("jwtKey", jsonLogin.Username, 3600, "/", "localhost", false, true)
 
+			msg := "User "+val.Fullname+" with user_id "+strconv.Itoa(val.Id)+" Login"
+			CreateLogHistory(false, msg, "{}")
 			c.JSON(http.StatusOK, gin.H{
 				"status":  "you are logged in",
 				"Token":   ss,
@@ -119,10 +168,12 @@ func main() {
 		}
 	})
 
+	// payment route
 	r.POST("/payment", func(c *gin.Context) {
 		// validasi jwt
 		jwtKey, err := c.Cookie("jwtKey")
 		if err != nil {
+			CreateLogHistory(true, "unauthorized", "{}")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"status": "Unauthorized",
 			})
@@ -131,6 +182,7 @@ func main() {
 
 		tokenAuth := c.Request.Header["Authorization"]
 		if len(tokenAuth) < 1 {
+			CreateLogHistory(true, "Token Doesn't exists", "{}")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   true,
 				"message": "Token Doesn't exists",
@@ -144,6 +196,7 @@ func main() {
 		})
 
 		if err != nil {
+			CreateLogHistory(true, err.Error(), "{}")
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"message": err.Error(),
 			})
@@ -152,6 +205,7 @@ func main() {
 
 		claims, ok := token.Claims.(*UserClaims)
 		if !ok || !token.Valid {
+			CreateLogHistory(true, err.Error(), "{}")
 			c.JSON(http.StatusOK, gin.H{
 				"error":   true,
 				"message": err.Error(),
@@ -168,6 +222,7 @@ func main() {
 		}
 		nominal := jsonPayment.Nominal
 		to := jsonPayment.To
+		from := claims.Norek
 
 		// pengurangan dan panambahan balance => ubah logic update data
 		userFile := "json/user.json"
@@ -181,14 +236,49 @@ func main() {
 		userDataInput := []Data{}
 
 		json.Unmarshal(userFileData, &userData)
+		fmt.Println(userData.Data)
+
+		norek_list := map[string]string{}
+
 		for _, val := range userData.Data {
+			norek_list[val.Norek] = val.Norek
+		}
+
+		fmt.Println(norek_list)
+
+		for _, val := range userData.Data {
+			if _, ok := norek_list[to]; !ok {
+				CreateLogHistory(true, "nomor rekening tidak tersedia", "{}")
+				c.JSON(http.StatusOK, gin.H{
+					"message": "nomor rekening tidak tersedia",
+				})
+				return
+		}
+			
+			balance := val.Balance
+			if balance < nominal {
+				CreateLogHistory(true, "dana anda tidak cukup", "{}")
+				c.JSON(http.StatusOK, gin.H{
+					"message": "dana anda tidak cukup",
+				})
+				return
+			}
+
+			fmt.Println(jsonPayment)
+			if from == val.Norek{
+				fmt.Println("from")
+				balance -= nominal
+			} else if to == val.Norek {
+				fmt.Println("to")
+				balance += nominal
+			}
 			newStruct := &Data{
 				Id:         val.Id,
 				Username:   val.Username,
 				Password:   val.Password,
 				Fullname:   val.Fullname,
 				Norek:      val.Norek,
-				Balance:    val.Balance - nominal,
+				Balance:    balance,
 				Created_at: val.Created_at,
 				Updated_at: time.Now().String(),
 			}
@@ -207,79 +297,6 @@ func main() {
 			if err != nil {
 				return
 			}
-			// if jsonPayment.From == val.Norek {
-			// 	newStruct := &Data{
-			// 		Id:         val.Id,
-			// 		Username:   val.Username,
-			// 		Password:   val.Password,
-			// 		Fullname:   val.Fullname,
-			// 		Norek:      val.Norek,
-			// 		Balance:    val.Balance - nominal,
-			// 		Created_at: val.Created_at,
-			// 		Updated_at: time.Now().String(),
-			// 	}
-			// 	userDataInput = append(userDataInput, *newStruct)
-			// 	UserDataObj := User{
-			// 		Data: userDataInput,
-			// 	}
-
-			// 	// Preparing the data to be marshalled and written.
-			// 	dataBytes, err := json.MarshalIndent(UserDataObj, "", " ")
-			// 	if err != nil {
-			// 		return
-			// 	}
-
-			// 	err = ioutil.WriteFile(userFile, dataBytes, 0644)
-			// 	if err != nil {
-			// 		return
-			// 	}
-			// } else if jsonPayment.To == val.Norek {
-			// 	newStruct := &Data{
-			// 		Id:         val.Id,
-			// 		Username:   val.Username,
-			// 		Password:   val.Password,
-			// 		Fullname:   val.Fullname,
-			// 		Norek:      val.Norek,
-			// 		Balance:    val.Balance + nominal,
-			// 		Created_at: val.Created_at,
-			// 		Updated_at: time.Now().String(),
-			// 	}
-			// 	userDataInput = append(userDataInput, *newStruct)
-
-			// 	// Preparing the data to be marshalled and written.
-			// 	dataBytes, err := json.MarshalIndent(userDataInput, "", " ")
-			// 	if err != nil {
-			// 		return
-			// 	}
-
-			// 	err = ioutil.WriteFile(userFile, dataBytes, 0644)
-			// 	if err != nil {
-			// 		return
-			// 	}
-			// } else {
-			// 	newStruct := &Data{
-			// 		Id:         val.Id,
-			// 		Username:   val.Username,
-			// 		Password:   val.Password,
-			// 		Fullname:   val.Fullname,
-			// 		Norek:      val.Norek,
-			// 		Balance:    val.Balance + nominal,
-			// 		Created_at: val.Created_at,
-			// 		Updated_at: time.Now().String(),
-			// 	}
-			// 	userDataInput = append(userDataInput, *newStruct)
-
-			// 	// Preparing the data to be marshalled and written.
-			// 	dataBytes, err := json.MarshalIndent(userDataInput, "", " ")
-			// 	if err != nil {
-			// 		return
-			// 	}
-
-			// 	err = ioutil.WriteFile(userFile, dataBytes, 0644)
-			// 	if err != nil {
-			// 		return
-			// 	}
-			// }
 		}
 
 		// record transfer
@@ -317,6 +334,7 @@ func main() {
 			return
 		}
 
+		CreateLogHistory(false, "success transfer payment", "{}")
 		c.JSON(http.StatusOK, gin.H{
 			"status": "success transfer payment",
 			"data":   claims,
@@ -325,6 +343,7 @@ func main() {
 
 	r.GET("/logout", func(c *gin.Context) {
 		c.SetCookie("jwtKey", "", -1, "/", "localhost", false, true)
+		CreateLogHistory(false, "User Logout", "{}")
 		c.JSON(http.StatusOK, gin.H{
 			"status": "Cookies Delete",
 		})
