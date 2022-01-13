@@ -6,29 +6,29 @@
    "password": "$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
    "fullname": "fatur",
    "norek": "123456789",
-   "balance": 500000,
+   "balance": 2500000,
    "created_at": "2022-01-01",
-   "updated_at": "2022-01-12 23:20:29.9428783 +0700 +07 m=+124.514196601"
+   "updated_at": "2022-01-13 17:21:09.4083098 +0700 +07 m=+16.195484801"
   },
   {
    "id": 2,
    "username": "ijat",
-   "password": "$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
+   "password": "$2a$12$yASUoMfPWKTt3xq5XnUmnu8sboTjdBrqhj1CLwMG.jMJ1rCMBEDFO",
    "fullname": "ijat",
    "norek": "987654321",
-   "balance": 1500000,
+   "balance": 1000000,
    "created_at": "2022-01-01",
-   "updated_at": "2022-01-12 23:20:29.9456075 +0700 +07 m=+124.516925801"
+   "updated_at": "2022-01-13 17:21:09.4088423 +0700 +07 m=+16.196017301"
   },
   {
    "id": 3,
    "username": "jarjit",
-   "password": "$2a$12$SDsL7SVwA1a/kEqny/i5X.Xzpw.7KaRoRNcLojI8rj.Kz/Wtb7YHu",
+   "password": "$2a$12$GEnt53Cvxn0IewB961kzrunX/IiwRkcWftHluUuWaIEtOWCRSPCE2",
    "fullname": "jarjit",
    "norek": "234567891",
-   "balance": 2000000,
+   "balance": 14000000,
    "created_at": "2022-01-01",
-   "updated_at": "2022-01-12 23:20:29.9555825 +0700 +07 m=+124.526900801"
+   "updated_at": "2022-01-13 17:21:09.4093769 +0700 +07 m=+16.196551901"
   }
  ]
 }

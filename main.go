@@ -2,13 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
-	"fmt"
-	
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
@@ -56,24 +57,24 @@ type PaymentTf struct {
 }
 
 type Log struct {
-	Error bool	`json:"error"`
-	Message string	`json:"message"`
-	Data string `json:"data"`
+	Error   bool   `json:"error"`
+	Message string `json:"message"`
+	Data    string `json:"data"`
 }
 
 type LogHistory struct {
-	Id int `json:"id"`
-	Log string `json:"log"`
+	Id         int    `json:"id"`
+	Log        string `json:"log"`
 	Created_at string `json:"created_at"`
 	Updated_at string `json:"updated_at"`
 }
 
-func CreateLogHistory (error bool, message, data string) {
+func CreateLogHistory(error bool, message, data string) {
 	fileName := "json/log.json"
 	file, err := ioutil.ReadFile(fileName)
-		if err != nil {
-			return
-		}
+	if err != nil {
+		return
+	}
 	object := Log{error, message, data}
 	jsonString, _ := json.Marshal(object)
 
@@ -81,7 +82,7 @@ func CreateLogHistory (error bool, message, data string) {
 	json.Unmarshal(file, &LogData)
 	newStruct := &LogHistory{
 		Id:         len(LogData) + 1,
-		Log: string(jsonString),
+		Log:        string(jsonString),
 		Created_at: time.Now().String(),
 		Updated_at: time.Now().String(),
 	}
@@ -102,51 +103,87 @@ func CreateLogHistory (error bool, message, data string) {
 
 func main() {
 	r := gin.Default()
+
+	// route tes endpoint
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
 
+	// route login
 	r.POST("/login", func(c *gin.Context) {
 		var jsonLogin Login
 		if err := c.ShouldBindJSON(&jsonLogin); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			if err.Error() == "EOF" {
+				CreateLogHistory(true, "blank username and password", "{}")
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   true,
+					"message": "blank username and password",
+					"data":    "{}",
+				})
+			}
 			return
 		}
 
 		mySigningKey := []byte(jsonLogin.Username)
-		password := []byte(jsonLogin.Password)
 
 		// Declare the expiration time of the token
 		// here, we have kept it as 5 minutes
-		expirationTime := time.Now().Add(60 * time.Minute)
+		expirationTime := time.Now().Add(5 * time.Minute)
 
+		// open file user.json
 		userJson, _ := ioutil.ReadFile("json/user.json")
 		var userData User
 		json.Unmarshal(userJson, &userData)
 
-		fmt.Println(userData)
+		auth := map[string]string{}
 		for _, val := range userData.Data {
-			hashedPassword := []byte(val.Password)
-			matchPass := bcrypt.CompareHashAndPassword(hashedPassword, password)
-			if jsonLogin.Username != val.Username || matchPass != nil {
-				CreateLogHistory(true, "unauthorized", "{}")
-				c.JSON(http.StatusUnauthorized, gin.H{"status": "unauthorized"})
+			auth[val.Username] = val.Username
+			auth[val.Password] = val.Password
+		}
+
+		authList := map[string]interface{}{}
+		for _, val := range userData.Data {
+			authList[val.Username] = val
+		}
+
+		for _, val := range userData.Data {
+			usernameData, usernameFound := auth[jsonLogin.Username]
+			hashedPassword, _ := auth[val.Password]
+			bcryptPass := []byte(hashedPassword)
+			pass := []byte(jsonLogin.Password)
+			matchPass := bcrypt.CompareHashAndPassword(bcryptPass, pass)
+			if !usernameFound || matchPass != nil {
+				CreateLogHistory(true, "username or password wrong", "{}")
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error":   true,
+					"message": "username or password wrong",
+					"data":    "{}",
+				})
 				return
 			}
 
-			fmt.Println(val)
-
 			// Create the Claims
+			reflectValue := reflect.ValueOf(authList[usernameData])
+
+			Id := reflectValue.Field(0).Interface().(int)
+			Username := reflectValue.Field(1).Interface().(string)
+			Fullname := reflectValue.Field(3).Interface().(string)
+			Norek := reflectValue.Field(4).Interface().(string)
+			Balance := reflectValue.Field(5).Interface().(int)
+			Created_at := reflectValue.Field(6).Interface().(string)
+			Updated_at := reflectValue.Field(7).Interface().(string)
+
+			// set value claims
 			claims := UserClaims{
-				val.Id,
-				val.Username,
-				val.Fullname,
-				val.Norek,
-				val.Balance,
-				val.Created_at,
-				val.Updated_at,
+				Id,
+				Username,
+				Fullname,
+				Norek,
+				Balance,
+				Created_at,
+				Updated_at,
 				jwt.StandardClaims{
 					ExpiresAt: expirationTime.Unix(),
 				},
@@ -157,12 +194,14 @@ func main() {
 
 			c.SetCookie("jwtKey", jsonLogin.Username, 3600, "/", "localhost", false, true)
 
-			msg := "User "+val.Fullname+" with user_id "+strconv.Itoa(val.Id)+" Login"
+			msg := "User " + Fullname + " with user_id " + strconv.Itoa(Id) + " Login"
 			CreateLogHistory(false, msg, "{}")
 			c.JSON(http.StatusOK, gin.H{
-				"status":  "you are logged in",
 				"Token":   ss,
 				"expires": expirationTime,
+				"error":   false,
+				"message": "Success Login",
+				"data":    claims,
 			})
 			return
 		}
@@ -173,9 +212,11 @@ func main() {
 		// validasi jwt
 		jwtKey, err := c.Cookie("jwtKey")
 		if err != nil {
-			CreateLogHistory(true, "unauthorized", "{}")
+			CreateLogHistory(true, "Forbidden", "{}")
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"status": "Unauthorized",
+				"error":   true,
+				"message": "Can't access this page",
+				"data":    "{}",
 			})
 			return
 		}
@@ -186,6 +227,7 @@ func main() {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error":   true,
 				"message": "Token Doesn't exists",
+				"data":    "{}",
 			})
 			return
 		}
@@ -197,8 +239,10 @@ func main() {
 
 		if err != nil {
 			CreateLogHistory(true, err.Error(), "{}")
-			c.JSON(http.StatusUnauthorized, gin.H{
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":   true,
 				"message": err.Error(),
+				"data":    "{}",
 			})
 			return
 		}
@@ -206,25 +250,33 @@ func main() {
 		claims, ok := token.Claims.(*UserClaims)
 		if !ok || !token.Valid {
 			CreateLogHistory(true, err.Error(), "{}")
-			c.JSON(http.StatusOK, gin.H{
+			c.JSON(http.StatusBadGateway, gin.H{
 				"error":   true,
 				"message": err.Error(),
+				"data":    "{}",
 			})
-			fmt.Println("err = ", err.Error())
 			return
 		}
 
 		// payment
 		var jsonPayment PaymentTf
 		if err := c.ShouldBindJSON(&jsonPayment); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			if err.Error() == "EOF" {
+				CreateLogHistory(true, "Please insert nominal and the destination account number", "{}")
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   true,
+					"message": "Please insert nominal and the destination account number",
+					"data":    "{}",
+				})
+			}
 			return
 		}
+
 		nominal := jsonPayment.Nominal
 		to := jsonPayment.To
 		from := claims.Norek
 
-		// pengurangan dan panambahan balance => ubah logic update data
+		// pengurangan dan panambahan balance
 		userFile := "json/user.json"
 
 		userFileData, err := ioutil.ReadFile(userFile)
@@ -236,39 +288,56 @@ func main() {
 		userDataInput := []Data{}
 
 		json.Unmarshal(userFileData, &userData)
-		fmt.Println(userData.Data)
 
 		norek_list := map[string]string{}
-
 		for _, val := range userData.Data {
 			norek_list[val.Norek] = val.Norek
 		}
 
-		fmt.Println(norek_list)
+		balance_list := map[int]int{}
+		for _, val := range userData.Data {
+			balance_list[val.Id] = val.Balance
+		}
+
+		// pengecekan rekening dan balance
+		if _, ok := norek_list[to]; !ok {
+			CreateLogHistory(true, "account number not available", "{}")
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   true,
+				"message": "account number not available",
+				"data":    "{}",
+			})
+			return
+		}
+
+		if to == from {
+			CreateLogHistory(true, "can't transfer to own account", "{}")
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   true,
+				"message": "can't transfer to own account",
+				"data":    "{}",
+			})
+			return
+		}
+
+		balance, _ := balance_list[claims.Id]
+		if balance < nominal {
+			CreateLogHistory(true, "your funds are not enough", "{}")
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   true,
+				"message": "your funds are not enough",
+				"data":    "{}",
+			})
+			return
+		}
 
 		for _, val := range userData.Data {
-			if _, ok := norek_list[to]; !ok {
-				CreateLogHistory(true, "nomor rekening tidak tersedia", "{}")
-				c.JSON(http.StatusOK, gin.H{
-					"message": "nomor rekening tidak tersedia",
-				})
-				return
-		}
-			
-			balance := val.Balance
-			if balance < nominal {
-				CreateLogHistory(true, "dana anda tidak cukup", "{}")
-				c.JSON(http.StatusOK, gin.H{
-					"message": "dana anda tidak cukup",
-				})
-				return
-			}
-
-			fmt.Println(jsonPayment)
-			if from == val.Norek{
+			// kalkulasi
+			balance = val.Balance
+			if from == norek_list[val.Norek] {
 				fmt.Println("from")
 				balance -= nominal
-			} else if to == val.Norek {
+			} else if to == norek_list[val.Norek] {
 				fmt.Println("to")
 				balance += nominal
 			}
@@ -336,8 +405,9 @@ func main() {
 
 		CreateLogHistory(false, "success transfer payment", "{}")
 		c.JSON(http.StatusOK, gin.H{
-			"status": "success transfer payment",
-			"data":   claims,
+			"error":   false,
+			"message": "success transfer payment",
+			"data":    newStruct,
 		})
 	})
 
@@ -345,7 +415,8 @@ func main() {
 		c.SetCookie("jwtKey", "", -1, "/", "localhost", false, true)
 		CreateLogHistory(false, "User Logout", "{}")
 		c.JSON(http.StatusOK, gin.H{
-			"status": "Cookies Delete",
+			"error":   false,
+			"message": "User Logout",
 		})
 	})
 	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
